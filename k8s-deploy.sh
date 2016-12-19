@@ -46,33 +46,31 @@ kube::load_images()
 {
     mkdir -p /tmp/k8s
     
-    master_images_version=(v1.5.1 v1.5.1 v1.5.1 v1.5.1 3.0 1.0 1.9 1.2 1.4 1.0 v3.0.15 latest )
     master_images=(
-        kube-apiserver-amd64
-        kube-controller-manager-amd64
-        kube-scheduler-amd64
-        kube-proxy-amd64
-        pause-amd64
-        kube-discovery-amd64
-        kubedns-amd64
-        exechealthz-amd64
-        kube-dnsmasq-amd64
-        dnsmasq-metrics-amd64
-        etcd
-        flannel-git
+        kube-apiserver-amd64:v1.5.1
+        kube-controller-manager-amd64:v1.5.1
+        kube-scheduler-amd64:v1.5.1
+        kube-proxy-amd64:v1.5.1
+        pause-amd64:3.0
+        kube-discovery-amd64:1.0
+        kubedns-amd64:1.9
+        exechealthz-amd64:1.2
+        kube-dnsmasq-amd64:1.4
+        dnsmasq-metrics-amd64:1.0
+        etcd:v3.0.15
+        flannel-git:latest
     )
 
-    node_images_version=(3.0 v1.5.1 latest)
     node_images=(
-        pause-amd64
-        kube-proxy-amd64
-        flannel-git
+        pause-amd64:3.0
+        kube-proxy-amd64:v1.5.1
+        flannel-git:latest
     )
 
     if [ $1 == "master" ]; then
         # 判断镜像是否存在，不存在才会去load,   etcd会错误判断，不影响安装k8s， 懒的改了。
         for i in "${!master_images[@]}"; do 
-            ret=$(docker images | grep $KUBE_REPO_PREFIX/${master_images[$i]} | grep -w ${master_images_version[$i]} | wc -l)
+            ret=$(docker images | awk 'NR!=1{print $1":"$2}'| grep $KUBE_REPO_PREFIX/${master_images[$i]} | wc -l)
             if [ $ret -lt 1 ];then
                 curl -L http://$HTTP_SERVER/images/${master_images[$i]}.tar > /tmp/k8s/${master_images[$i]}.tar
                 docker load < /tmp/k8s/${master_images[$i]}.tar
@@ -80,7 +78,7 @@ kube::load_images()
         done
     else
         for i in "${!node_images[@]}"; do 
-            ret=$(docker images | grep $KUBE_REPO_PREFIX/${node_images[$i]} | grep -w ${node_images_version[$i]} | wc -l)
+            ret=$(docker images | awk 'NR!=1{print $1":"$2}' | grep $KUBE_REPO_PREFIX/${node_images[$i]} |  wc -l)
             if [ $ret -lt 1 ];then
                 curl -L http://$HTTP_SERVER/images/${node_images[$i]}.tar > /tmp/k8s/${node_images[$i]}.tar
                 docker load < /tmp/k8s/${node_images[$i]}.tar
@@ -103,6 +101,7 @@ kube::install_bin()
         systemctl enable kubelet.service && systemctl start kubelet.service && rm -rf /etc/kubernetes
     fi
 }
+
 kube::config_firewalld()
 {
     systemctl disable firewalld && systemctl stop firewalld
@@ -110,11 +109,13 @@ kube::config_firewalld()
     # iptables -A IN_public_allow -p tcp -m tcp --dport 6443 -m conntrack --ctstate NEW -j ACCEPT
     # iptables -A IN_public_allow -p tcp -m tcp --dport 10250 -m conntrack --ctstate NEW -j ACCEPT
 }
+
 kube::wati_manifests(){
     while [[ ! -f /etc/kubernetes/manifests/kube-scheduler.json ]]; do
         sleep 2
     done
 }
+
 kube::config_manifests()
 {
     cd /etc/kubernetes/manifests
@@ -123,6 +124,7 @@ kube::config_manifests()
         sed -i '/image/a\        \"imagePullPolicy\": \"IfNotPresent\",' $file
     done
 }
+
 kube::wait_apiserver()
 {
     ret=1
@@ -132,6 +134,7 @@ kube::wait_apiserver()
         ret=$?
     done
 }
+
 kube::master_up()
 {
 
@@ -161,6 +164,7 @@ kube::master_up()
     kubectl --namespace=kube-system get po
     echo kubectl --namespace=kube-system get po
 }
+
 kube::node_up()
 {
     kube::install_docker
@@ -173,6 +177,7 @@ kube::node_up()
 
     kubeadm join $@
 }
+
 kube::tear_down()
 {
     systemctl stop kubelet.service
@@ -184,6 +189,7 @@ kube::tear_down()
     rm -rf /var/lib/cni
     ip link del cni0
 }
+
 main()
 {
     case $1 in
