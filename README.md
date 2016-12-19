@@ -38,8 +38,7 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token=6669b1.81
 
 ## 总结
 
-整个脚本实现比较简单， 坑都在脚本里解决了。脚本文件在[这里](https://gist.github.com/xiaoping378/3a129aa6c81eaecae199a50236ad8bf7)
-
+整个脚本实现比较简单， 坑都在脚本里解决了。
 就一个master-up和node-up， 基本一个函数只做一件事，很清晰，可以自己查看具体过程。
 
 1.5 与 1.3给我感觉最大的变化是网络部分， 1.5启用了cni网络插件
