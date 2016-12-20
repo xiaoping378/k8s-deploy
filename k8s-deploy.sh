@@ -19,7 +19,7 @@ kube::install_docker()
     if [ $i -ne 0 ]; then
         curl -L http://$HTTP_SERVER/rpms/docker.tar.gz > /tmp/docker.tar.gz 
         tar zxf /tmp/docker.tar.gz -C /tmp
-        yum install -y /tmp/docker/*.rpm  
+        yum localinstall -y /tmp/docker/*.rpm  
         kube::config_docker
     fi
     systemctl enable docker.service && systemctl start docker.service
@@ -96,7 +96,7 @@ kube::install_bin()
     if [ $i -ne 0 ]; then
         curl -L http://$HTTP_SERVER/rpms/k8s.tar.gz > /tmp/k8s.tar.gz
         tar zxf /tmp/k8s.tar.gz -C /tmp
-        yum install -y  /tmp/k8s/*.rpm
+        yum localinstall -y  /tmp/k8s/*.rpm
         rm -rf /tmp/k8s*
         systemctl enable kubelet.service && systemctl start kubelet.service && rm -rf /etc/kubernetes
     fi
@@ -158,7 +158,6 @@ kube::master_up()
     #install flannel network
     kubectl apply -f http://$HTTP_SERVER/network/kube-flannel.yaml
 
-    ##
 
     #show pods
     kubectl --namespace=kube-system get po
