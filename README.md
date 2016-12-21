@@ -2,7 +2,7 @@
 
 经常遇到全新初始安装k8s集群的问题，所以想着搞成离线模式，本着最小依赖原则，提高安装速度
 
-基于Centos7-1511-minimal,  非此版本脚本可能会运行出错
+基于Centos7-1503-minimal运行脚本测试OK， 默认安装docker1.12.5 etcd-v3.0.15 k8s-v1.5.1
 
 本离线安装所有的依赖都打包放到了[百度网盘](https://pan.baidu.com/s/1i5jusip)
 
