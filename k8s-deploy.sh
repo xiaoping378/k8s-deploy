@@ -16,6 +16,7 @@ kube::install_docker()
     set +e
     which docker > /dev/null 2>&1
     i=$?
+    set -e
     if [ $i -ne 0 ]; then
         curl -L http://$HTTP_SERVER/rpms/docker.tar.gz > /tmp/docker.tar.gz 
         tar zxf /tmp/docker.tar.gz -C /tmp
@@ -47,30 +48,30 @@ kube::load_images()
     mkdir -p /tmp/k8s
     
     master_images=(
-        kube-apiserver-amd64:v1.5.1
-        kube-controller-manager-amd64:v1.5.1
-        kube-scheduler-amd64:v1.5.1
-        kube-proxy-amd64:v1.5.1
-        pause-amd64:3.0
-        kube-discovery-amd64:1.0
-        kubedns-amd64:1.9
-        exechealthz-amd64:1.2
-        kube-dnsmasq-amd64:1.4
-        dnsmasq-metrics-amd64:1.0
-        etcd:v3.0.15
-        flannel-git:latest
+        kube-apiserver-amd64_v1.5.1
+        kube-controller-manager-amd64_v1.5.1
+        kube-scheduler-amd64_v1.5.1
+        kube-proxy-amd64_v1.5.1
+        pause-amd64_3.0
+        kube-discovery-amd64_1.0
+        kubedns-amd64_1.9
+        exechealthz-amd64_1.2
+        kube-dnsmasq-amd64_1.4
+        dnsmasq-metrics-amd64_1.0
+        etcd_v3.0.15
+        flannel-git_latest
     )
 
     node_images=(
-        pause-amd64:3.0
-        kube-proxy-amd64:v1.5.1
-        flannel-git:latest
+        pause-amd64_3.0
+        kube-proxy-amd64_v1.5.1
+        flannel-git_latest
     )
 
     if [ $1 == "master" ]; then
         # 判断镜像是否存在，不存在才会去load,   etcd会错误判断，不影响安装k8s， 懒的改了。
         for i in "${!master_images[@]}"; do 
-            ret=$(docker images | awk 'NR!=1{print $1":"$2}'| grep $KUBE_REPO_PREFIX/${master_images[$i]} | wc -l)
+            ret=$(docker images | awk 'NR!=1{print $1"_"$2}'| grep $KUBE_REPO_PREFIX/${master_images[$i]} | wc -l)
             if [ $ret -lt 1 ];then
                 curl -L http://$HTTP_SERVER/images/${master_images[$i]}.tar > /tmp/k8s/${master_images[$i]}.tar
                 docker load < /tmp/k8s/${master_images[$i]}.tar
@@ -78,7 +79,7 @@ kube::load_images()
         done
     else
         for i in "${!node_images[@]}"; do 
-            ret=$(docker images | awk 'NR!=1{print $1":"$2}' | grep $KUBE_REPO_PREFIX/${node_images[$i]} |  wc -l)
+            ret=$(docker images | awk 'NR!=1{print $1"_"$2}' | grep $KUBE_REPO_PREFIX/${node_images[$i]} |  wc -l)
             if [ $ret -lt 1 ];then
                 curl -L http://$HTTP_SERVER/images/${node_images[$i]}.tar > /tmp/k8s/${node_images[$i]}.tar
                 docker load < /tmp/k8s/${node_images[$i]}.tar
@@ -91,8 +92,9 @@ kube::load_images()
 kube::install_bin()
 {
     set +e
-    which kubelet > /dev/null 2>&1
+    which kubeadm > /dev/null 2>&1
     i=$?
+    set -e
     if [ $i -ne 0 ]; then
         curl -L http://$HTTP_SERVER/rpms/k8s.tar.gz > /tmp/k8s.tar.gz
         tar zxf /tmp/k8s.tar.gz -C /tmp
