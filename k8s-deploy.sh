@@ -139,7 +139,6 @@ kube::wait_apiserver()
 
 kube::master_up()
 {
-
     kube::install_docker
 
     kube::load_images master
@@ -148,22 +147,22 @@ kube::master_up()
 
     kube::config_firewalld
 
-    #这里一定要带上--pod-network-cidr参数，不然后面的flannel网络会出问题
+    # 这里一定要带上--pod-network-cidr参数，不然后面的flannel网络会出问题
     export KUBE_ETCD_IMAGE=quay.io/coreos/etcd:v3.0.15
     kubeadm init --use-kubernetes-version=v1.5.1  --pod-network-cidr=10.244.0.0/16
 
     # 改image pull 策略， 1.50之后不需要更改策略了， 默认就是 IfNotPresent
     # kube::wati_manifests && kube::config_manifests
     # kube::wait_apiserver
+
+    # 使能master，可以被调度到
     # kubectl taint nodes --all dedicated-
 
-    #install flannel network
+    # install flannel network
     kubectl apply -f http://$HTTP_SERVER/network/kube-flannel.yaml
 
-
-    #show pods
+    # show pods
     kubectl --namespace=kube-system get po
-    echo kubectl --namespace=kube-system get po
 }
 
 kube::node_up()
