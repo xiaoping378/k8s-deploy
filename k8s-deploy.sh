@@ -30,16 +30,22 @@ kube::install_docker()
 
 kube::config_docker()
 {
-    setenforce 0
-    sed -i -e 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+    setenforce 0 > /dev/null 2>&1 && sed -i -e 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
 
     sysctl -w net.bridge.bridge-nf-call-iptables=1
     sysctl -w net.bridge.bridge-nf-call-ip6tables=1
-    # /etc/sysctl.conf 
-    # net.bridge.bridge-nf-call-ip6tables = 1
-    # net.bridge.bridge-nf-call-iptables = 1
+cat <<EOF >>/etc/sysctl.conf
+    net.bridge.bridge-nf-call-ip6tables = 1
+    net.bridge.bridge-nf-call-iptables = 1
+EOF
 
-    echo DOCKER_STORAGE_OPTIONS=\" -s overlay --selinux-enabled=false\" > /etc/sysconfig/docker-storage
+    mkdir -p /etc/systemd/system/docker.service.d
+cat <<EOF >/etc/systemd/system/docker.service.d/10-docker.conf
+[Service]
+    ExecStart=
+    ExecStart=/usr/bin/dockerd -s overlay --selinux-enabled=false
+EOF
+
     systemctl daemon-reload && systemctl restart docker.service
 }
 
