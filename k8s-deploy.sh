@@ -119,9 +119,7 @@ kube::config_firewalld()
 }
 
 kube::wati_manifests(){
-    while [[ ! -f /etc/kubernetes/manifests/kube-scheduler.json ]]; do
-        sleep 2
-    done
+    until [ -f /etc/kubernetes/manifests/kube-scheduler.json ]; do sleep 1; done
 }
 
 kube::config_manifests()
@@ -135,12 +133,14 @@ kube::config_manifests()
 
 kube::wait_apiserver()
 {
-    ret=1
-    while [[ $ret != 0 ]]; do
-        sleep 2
-        curl -k https://127.0.0.1:6443 2>&1>/dev/null
-        ret=$?
-    done
+    until curl http://127.0.0.1:8080; do sleep 1; done
+}
+
+kube::disable_static_pod()
+{
+    # remove the waring log in kubelet
+    sed -i 's/--pod-manifest-path=\/etc\/kubernetes\/manifests//g' /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+    systemctl daemon-reload && systemctl restart kubelet.service
 }
 
 kube::master_up()
@@ -178,6 +178,8 @@ kube::node_up()
     kube::load_images minion
 
     kube::install_bin
+
+    kube::disable_static_pod
 
     kube::config_firewalld
 

@@ -13,6 +13,7 @@ data:
       "name": "cbr0",
       "type": "flannel",
       "delegate": {
+        "forceAddress": true,
         "isDefaultGateway": true
       }
     }
