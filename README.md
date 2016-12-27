@@ -26,6 +26,12 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh | bash -s master
 ```
 192.168.56.1:8000 是我的http-server, 注意要将k8s-deploy.sh 里的HTTP-SERVER变量也改下
 
+安装docker时，如果之前装过“不干净的”东西，可能会遇到依赖问题，我这里会遇到systemd-python依赖问题，
+卸载之，即可
+```
+yum remove -y systemd-python
+```
+
 
 ## minion侧
 
@@ -43,6 +49,6 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token=6669b1.81
 1.5 与 1.3给我感觉最大的变化是网络部分， 1.5启用了cni网络插件
 不需要像以前一样非要把flannel和docker绑在一起了（先启flannel才能启docker）。
 
+
 具体可以看这里
 https://github.com/containernetworking/cni/blob/master/Documentation/flannel.md
-
