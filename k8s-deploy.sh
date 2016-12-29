@@ -3,7 +3,10 @@ set -x
 set -e
 
 HTTP_SERVER=192.168.56.1:8000
+KUBE_HA=true
+
 KUBE_REPO_PREFIX=gcr.io/google_containers
+KUBE_ETCD_IMAGE=quay.io/coreos/etcd:v3.0.15
 
 root=$(id -u)
 if [ "$root" -ne 0 ] ;then
@@ -18,9 +21,9 @@ kube::install_docker()
     i=$?
     set -e
     if [ $i -ne 0 ]; then
-        curl -L http://$HTTP_SERVER/rpms/docker.tar.gz > /tmp/docker.tar.gz 
+        curl -L http://$HTTP_SERVER/rpms/docker.tar.gz > /tmp/docker.tar.gz
         tar zxf /tmp/docker.tar.gz -C /tmp
-        yum localinstall -y /tmp/docker/*.rpm  
+        yum localinstall -y /tmp/docker/*.rpm
         systemctl enable docker.service && systemctl start docker.service
         kube::config_docker
     fi
@@ -52,8 +55,8 @@ EOF
 kube::load_images()
 {
     mkdir -p /tmp/k8s
-    
-    master_images=(
+
+    images=(
         kube-apiserver-amd64_v1.5.1
         kube-controller-manager-amd64_v1.5.1
         kube-scheduler-amd64_v1.5.1
@@ -68,31 +71,15 @@ kube::load_images()
         flannel-git_latest
     )
 
-    node_images=(
-        pause-amd64_3.0
-        kube-proxy-amd64_v1.5.1
-        flannel-git_latest
-    )
+    for i in "${!images[@]}"; do
+        ret=$(docker images | awk 'NR!=1{print $1"_"$2}'| grep $KUBE_REPO_PREFIX/${images[$i]} | wc -l)
+        if [ $ret -lt 1 ];then
+            curl -L http://$HTTP_SERVER/images/${images[$i]}.tar > /tmp/k8s/${images[$i]}.tar
+            docker load < /tmp/k8s/${images[$i]}.tar
+        fi
+    done
 
-    if [ $1 == "master" ]; then
-        # 判断镜像是否存在，不存在才会去load,   etcd会错误判断，不影响安装k8s， 懒的改了。
-        for i in "${!master_images[@]}"; do 
-            ret=$(docker images | awk 'NR!=1{print $1"_"$2}'| grep $KUBE_REPO_PREFIX/${master_images[$i]} | wc -l)
-            if [ $ret -lt 1 ];then
-                curl -L http://$HTTP_SERVER/images/${master_images[$i]}.tar > /tmp/k8s/${master_images[$i]}.tar
-                docker load < /tmp/k8s/${master_images[$i]}.tar
-            fi
-        done
-    else
-        for i in "${!node_images[@]}"; do 
-            ret=$(docker images | awk 'NR!=1{print $1"_"$2}' | grep $KUBE_REPO_PREFIX/${node_images[$i]} |  wc -l)
-            if [ $ret -lt 1 ];then
-                curl -L http://$HTTP_SERVER/images/${node_images[$i]}.tar > /tmp/k8s/${node_images[$i]}.tar
-                docker load < /tmp/k8s/${node_images[$i]}.tar
-            fi
-        done
-    fi
-    rm /tmp/k8s* -rf 
+    rm /tmp/k8s* -rf
 }
 
 kube::install_bin()
@@ -143,19 +130,105 @@ kube::disable_static_pod()
     systemctl daemon-reload && systemctl restart kubelet.service
 }
 
+kube::get_env()
+{
+  HA_STATE=$1
+  [ $HA_STATE == "MASTER" ] && HA_PRIORITY=200 || HA_PRIORITY=`expr 200 - ${RANDOM} / 1000 + 1`
+  KUBE_VIP=$(echo $2 |awk -F= '{print $2}')
+  VIP_PREFIX=$(echo ${KUBE_VIP} | cut -d . -f 1,2,3)
+  VIP_INTERFACE=$(ip addr show | grep ${VIP_PREFIX} | awk -F 'global' '{print $2}' | head -1)
+  LOCAL_IP=$(ip addr show | grep ${VIP_PREFIX} | awk -F / '{print $1}' | awk -F ' ' '{print $2}' | head -1)
+  MASTER_NODES=$(echo $3 | grep -o '[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}')
+  MASTER_NODES_NO_LOCAL_IP=$(echo "${MASTER_NODES}" | sed -e 's/'${LOCAL_IP}'//g')
+}
+
+kube::install_keepalived()
+{
+    kube::get_env $@
+    set +e
+    which keepalived > /dev/null 2>&1
+    i=$?
+    set -e
+    if [ $i -ne 0 ]; then
+        ip addr add ${KUBE_VIP}/16 dev ${VIP_INTERFACE}
+        curl -L http://$HTTP_SERVER/rpms/keepalived.tar.gz > /tmp/keepalived.tar.gz
+        tar zxf /tmp/keepalived.tar.gz -C /tmp
+        yum localinstall -y  /tmp/keepalived/*.rpm
+        rm -rf /tmp/keepalived*
+        systemctl enable keepalived.service && systemctl start keepalived.service
+        kube::config_keepalived
+    fi
+}
+
+kube::config_keepalived()
+{
+  echo "gen keepalived configuration"
+cat <<EOF >/etc/keepalived/keepalived.conf
+global_defs {
+   router_id LVS_k8s
+}
+
+vrrp_script CheckK8sMaster {
+    script "curl http://127.0.0.1:8080"
+    interval 3
+    timeout 9
+    fall 2
+    rise 2
+}
+
+vrrp_instance VI_1 {
+    state ${HA_STATE}
+    interface ${VIP_INTERFACE}
+    virtual_router_id 61
+    priority ${HA_PRIORITY}
+    advert_int 1
+    mcast_src_ip ${LOCAL_IP}
+    nopreempt
+    authentication {
+        auth_type PASS
+        auth_pass sqP05dQgMSlzrxHj
+    }
+    unicast_peer {
+        ${MASTER_NODES_NO_LOCAL_IP}
+    }
+    virtual_ipaddress {
+        ${KUBE_VIP}/16
+    }
+    track_script {
+        CheckK8sMaster
+    }
+}
+
+EOF
+  modprobe ip_vs
+  systemctl daemon-reload && systemctl restart keepalived.service
+}
+
+kube::save_master_ip()
+{
+    set +e
+    # 应该从 $2 里拿到 etcd群的 --endpoints, 这里默认走的127.0.0.1:2379
+    [ ${KUBE_HA} == true ] && etcdctl mk ha_master ${LOCAL_IP}
+    set -e
+}
+
 kube::master_up()
 {
+    shift
+
     kube::install_docker
 
-    kube::load_images master
+    kube::load_images
 
     kube::install_bin
 
-    kube::config_firewalld
+    [ ${KUBE_HA} == true ] && kube::install_keepalived "MASTER" $@
+
+    # 存储master ip， replica侧需要用这个信息来copy 配置
+    kube::save_master_ip
 
     # 这里一定要带上--pod-network-cidr参数，不然后面的flannel网络会出问题
-    export KUBE_ETCD_IMAGE=quay.io/coreos/etcd:v3.0.15
-    kubeadm init --use-kubernetes-version=v1.5.1  --pod-network-cidr=10.244.0.0/16
+    kubeadm init --use-kubernetes-version=v1.5.1  --pod-network-cidr=10.244.0.0/16 $@
 
     # 改image pull 策略， 1.50之后不需要更改策略了， 默认就是 IfNotPresent
     # kube::wati_manifests && kube::config_manifests
@@ -164,6 +237,8 @@ kube::master_up()
     # 使能master，可以被调度到
     # kubectl taint nodes --all dedicated-
 
+    echo -e "\033[32m 赶紧找地方记录上面的token！ \033[0m"
+
     # install flannel network
     kubectl apply -f http://$HTTP_SERVER/network/kube-flannel.yaml
 
@@ -171,11 +246,38 @@ kube::master_up()
     kubectl --namespace=kube-system get po
 }
 
+kube::copy_master_config()
+{
+    local master_ip=$(etcdctl get ha_master)
+    mkdir -p /etc/kubernetes
+    scp -r root@${master_ip}:/etc/kubernetes/* /etc/kubernetes/
+    systemctl start kubelet
+}
+
+kube::replica_up()
+{
+    shift
+
+    kube::install_docker
+
+    kube::load_images
+
+    kube::install_bin
+
+    [ ${KUBE_HA} == true ] && kube::install_keepalived "BACKUP" $@
+
+    # 使能master，可以被调度到
+    # kubectl taint nodes --all dedicated-
+
+    kube::copy_master_config
+
+}
+
 kube::node_up()
 {
     kube::install_docker
 
-    kube::load_images minion
+    kube::load_images
 
     kube::install_bin
 
@@ -194,6 +296,11 @@ kube::tear_down()
     df |grep /var/lib/kubelet|awk '{ print $6 }'|xargs -I '{}' umount {}
     rm -rf /var/lib/kubelet && rm -rf /etc/kubernetes/ && rm -rf /var/lib/etcd
     yum remove -y kubectl kubeadm kubelet kubernetes-cni
+    if [ ${KUBE_HA} == true ]
+    then
+      yum remove -y keepalived
+      rm -rf /etc/keepalived/keepalived.conf
+    fi
     rm -rf /var/lib/cni
     ip link del cni0
 }
@@ -202,7 +309,10 @@ main()
 {
     case $1 in
     "m" | "master" )
-        kube::master_up
+        kube::master_up $@
+        ;;
+    "r" | "replica" )
+        kube::replica_up $@
         ;;
     "j" | "join" )
         shift
@@ -212,8 +322,9 @@ main()
         kube::tear_down
         ;;
     *)
-        echo "usage: $0 m[master] | j[join] token | d[down] "
+        echo "usage: $0 m[master] | r[replica] | j[join] token | d[down] "
         echo "       $0 master to setup master "
+        echo "       $0 replica to setup replica master "
         echo "       $0 join   to join master with token "
         echo "       $0 down   to tear all down ,inlude all data! so becarefull"
         echo "       unkown command $0 $@"

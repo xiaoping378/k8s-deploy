@@ -13,7 +13,7 @@ etcd::download()
     DOWNLOAD_URL=https://github.com/coreos/etcd/releases/download
     [ -f ${PWD}/temp-etcd/etcd ]  && return
     curl -L ${DOWNLOAD_URL}/${ETCD_VER}/etcd-${ETCD_VER}-linux-amd64.tar.gz -o ${PWD}/etcd-${ETCD_VER}-linux-amd64.tar.gz
-    mkdir -p ${PWD}/temp-etcd && tar xzvf ${PWD}/etcd-${ETCD_VER}-linux-amd64.tar.gz -C ${PWD}/temp-etcd --strip-components=1    
+    mkdir -p ${PWD}/temp-etcd && tar xzvf ${PWD}/etcd-${ETCD_VER}-linux-amd64.tar.gz -C ${PWD}/temp-etcd --strip-components=1
 }
 
 etcd::config()
@@ -56,7 +56,7 @@ After=network.target
 Type=notify
 WorkingDirectory=/var/lib/etcd
 EnvironmentFile=-/etc/etcd/10-etcd.conf
-ExecStart=/usr/bin/etcd 
+ExecStart=/usr/bin/etcd
 Restart=always
 RestartSec=8s
 LimitNOFILE=40000
@@ -99,10 +99,12 @@ etcd::deploy()
         etcd::scp "root@${NODE_MAP[$key]}" "${PWD}/temp-etcd/etcd ${PWD}/temp-etcd/etcdctl" "/usr/bin"
         etcd::ssh_nowait "root@${NODE_MAP[$key]}" "systemctl daemon-reload && systemctl enable etcd && nohup systemctl start etcd"
     done
+
+    rm -f ${PWD}/${key}.conf etcd.service
+
 }
 
 etcd::download
 etcd::gen_unit
 etcd::deploy
 echo -e "\033[32m 部署完毕！ \033[0m"
-
