@@ -15,6 +15,8 @@
 * 如果只想部署单master的话， 可以修改脚本里KUBE_HA=false
 * 如果想部署kubeadm的默认模式，即全面容器化单实例启动，可以参考[这里](https://github.com/xiaoping378/blog/issues/5)
 * 现在的keepalived和etcd集群没用容器运行，后面有时间会尝试做到全面容器化
+* 整体如下图所示
+![overview](http://kubernetes.io/images/docs/ha.svg)
 
 ## 第一步
 离线安装的基本思路是，在k8s-deploy目录下，临时启个http server， 节点上会从此拉取所依赖镜像和rpms
