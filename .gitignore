@@ -1,0 +1,4 @@
+/etcd/*.conf
+/etcd/temp-etcd
+/etcd/*.tar.gz
+/etcd/*.service

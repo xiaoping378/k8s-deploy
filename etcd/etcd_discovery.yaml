@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    component: etcd
+    tier: control-plane
+  name: etcd-discovery
+  namespace: kube-system
+spec:
+  containers:
+  - command:
+    - etcd
+    - --listen-peer-urls=http://127.0.0.1:4379
+    - --listen-client-urls=http://127.0.0.1:4378
+    - --advertise-client-urls=http://127.0.0.1:4378
+    - --data-dir=/var/etcd/data
+    image: quay.io/coreos/etcd:v3.0.15
+    imagePullPolicy: IfNotPresent
+    livenessProbe:
+      failureThreshold: 8
+      httpGet:
+        host: 127.0.0.1
+        path: /health
+        port: 4378
+        scheme: HTTP
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 15
+    name: etcd-disk
+    resources:
+      requests:
+        cpu: 200m
+    securityContext:
+      seLinuxOptions:
+        type: spc_t
+    terminationMessagePath: /dev/termination-log
+    volumeMounts:
+    - mountPath: /var/etcd
+      name: etcd
+  - env:
+    - name: DISC_ETCD
+      value: http://127.0.0.1:4378
+    - name: DISC_HOST
+      value: http://192.168.56.1:8087
+    image: quay.io/coreos/discovery.etcd.io
+    imagePullPolicy: IfNotPresent
+    name: etcd-discovery
+    resources:
+      requests:
+        cpu: 200m
+    securityContext:
+      seLinuxOptions:
+        type: spc_t
+    terminationMessagePath: /dev/termination-log
+    volumeMounts:
+    - mountPath: /var/etcd
+      name: etcd
+  hostNetwork: true
+  restartPolicy: Always
+  volumes:
+  - name: etcd
+    emptyDir: {}
