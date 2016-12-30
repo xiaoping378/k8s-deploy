@@ -13,9 +13,10 @@
 * 默认master和etcd共用一台设备，共三台相互冗余，自行确保所有设备开启NTP同步
 * master间通过keepalived做主-从-从冗余， controller和scheduler通过自带的--leader-elect选项
 * 如果只想部署单master的话， 可以修改脚本里KUBE_HA=false
-* 如果想部署kubeadm的默认模式，即全面容器化单实例启动，可以参考[这里](https://github.com/xiaoping378/blog/issues/5)
-* 现在的keepalived和etcd集群没用容器运行，后面有时间会尝试做到全面容器化
-* 整体如下图所示
+* 如果想部署kubeadm的默认模式，即全面容器化但都单实例的方式，可以参考[这里](https://github.com/xiaoping378/blog/issues/5)
+* [TODO]现在的keepalived和etcd集群没用容器运行，后面有时间会尝试做到全面容器化
+* [TODO]默认部署完，api-server会通过指定3个etcd 地址的方式启动，后续会让api-server只和localhost etcd通信
+* 下图是官方ha模型，此项目和官方比，没有引入LB，只用到了keepalived提供的VIP功能，任何时候只有一个api-server工作。
 ![overview](http://kubernetes.io/images/docs/ha.svg)
 
 ## 第一步
