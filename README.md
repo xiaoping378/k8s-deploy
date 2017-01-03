@@ -15,7 +15,7 @@
 * 如果只想部署单master的话， 可以修改脚本里KUBE_HA=false
 * 如果想部署kubeadm的默认模式，即全面容器化但都单实例的方式，可以参考[这里](https://github.com/xiaoping378/blog/issues/5)
 * [TODO]现在的keepalived和etcd集群没用容器运行，后面有时间会尝试做到全面容器化
-* 下图是官方ha模型，除了LB部分是用的lvs+keepalived的VIP功能, 此项目和官方基本一致
+* 下图是官方ha模型，除了LB部分是用的keepalived的VIP功能, 此项目和官方基本一致
 ![overview](http://kubernetes.io/images/docs/ha.svg)
 
 ## 第一步

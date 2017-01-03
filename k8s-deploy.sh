@@ -150,7 +150,8 @@ kube::install_keepalived()
     i=$?
     set -e
     if [ $i -ne 0 ]; then
-        ip addr add ${KUBE_VIP}/16 dev ${VIP_INTERFACE}
+        # centos7 needless to do this
+        # ip addr add ${KUBE_VIP}/32 dev ${VIP_INTERFACE}
         curl -L http://$HTTP_SERVER/rpms/keepalived.tar.gz > /tmp/keepalived.tar.gz
         tar zxf /tmp/keepalived.tar.gz -C /tmp
         yum localinstall -y  /tmp/keepalived/*.rpm
@@ -186,13 +187,13 @@ vrrp_instance VI_1 {
     nopreempt
     authentication {
         auth_type PASS
-        auth_pass sqP05dQgMSlzrxHj
+        auth_pass 378378
     }
     unicast_peer {
         ${MASTER_NODES_NO_LOCAL_IP}
     }
     virtual_ipaddress {
-        ${KUBE_VIP}/16
+        ${KUBE_VIP}
     }
     track_script {
         CheckK8sMaster
@@ -251,7 +252,7 @@ kube::master_up()
     kubectl apply -f http://$HTTP_SERVER/network/kube-flannel.yaml
 
     # show pods
-    kubectl --namespace=kube-system get po
+    kubectl get po --all-namespaces
 }
 
 kube::replica_up()
@@ -264,7 +265,7 @@ kube::replica_up()
 
     kube::install_bin
 
-    [ ${KUBE_HA} == true ] && kube::install_keepalived "BACKUP" $@
+    kube::install_keepalived "BACKUP" $@
 
     kube::copy_master_config
 
