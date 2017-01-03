@@ -212,6 +212,14 @@ kube::save_master_ip()
     set -e
 }
 
+kube::copy_master_config()
+{
+    local master_ip=$(etcdctl get ha_master)
+    mkdir -p /etc/kubernetes
+    scp -r root@${master_ip}:/etc/kubernetes/* /etc/kubernetes/
+    systemctl start kubelet
+}
+
 kube::master_up()
 {
     shift
@@ -246,14 +254,6 @@ kube::master_up()
     kubectl --namespace=kube-system get po
 }
 
-kube::copy_master_config()
-{
-    local master_ip=$(etcdctl get ha_master)
-    mkdir -p /etc/kubernetes
-    scp -r root@${master_ip}:/etc/kubernetes/* /etc/kubernetes/
-    systemctl start kubelet
-}
-
 kube::replica_up()
 {
     shift
@@ -265,9 +265,6 @@ kube::replica_up()
     kube::install_bin
 
     [ ${KUBE_HA} == true ] && kube::install_keepalived "BACKUP" $@
-
-    # 使能master，可以被调度到
-    # kubectl taint nodes --all dedicated-
 
     kube::copy_master_config
 
