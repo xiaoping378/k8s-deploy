@@ -69,7 +69,6 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh | bash -s replica \
 
 * 验证kube-apiserver故障影响
 
-  1.5.1，默认关闭了匿名访问，要通过带token的方式访问API
   ```
   while true; do kubectl get po -n kube-system; sleep 1; done
   ```
@@ -84,15 +83,14 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token=6c96b6.ca
 
 ## 总结
 
-整个脚本实现比较简单， 坑都在脚本里解决了。
-就一个master-up和node-up， 基本一个函数只做一件事，很清晰，可以自己查看具体过程。
+* 这个脚本如果中间运行出错，就会自动退出，自己手动执行下退出前卡住的地方，找原因，解决后，继续执行一开始的命令curl -L .... |　bash -s ...
 
-这个脚本如果中间运行出错，就会自动退出，
-自己手动执行下退出前卡住的地方，找原因，解决后，
-继续执行一开始的命令curl -L .... |　bash -s ...
+* 1.5.1，默认关闭了匿名访问，要通过带token的方式访问API，参考[这里](http://kubernetes.io/docs/user-guide/accessing-the-cluster/),
+```
+TOKEN=$(kubectl describe secret $(kubectl get secrets | grep default | cut -f1 -d ' ') | grep -E '^token' | cut -f2 -d':' | tr -d '\t')
+curl -k --tlsv1 -H "Authorization: Bearer $TOKEN" https://192.168.56.103:6443/api
+```
+当然也可以通过更改apiserver的启动参数来开启匿名访问，自行google
 
-1.5 与 1.3给我感觉最大的变化是网络部分， 1.5启用了cni网络插件
-不需要像以前一样非要把flannel和docker绑在一起了（先启flannel才能启docker）。
-
-具体可以看这里
-https://github.com/containernetworking/cni/blob/master/Documentation/flannel.md
+* 1.5 与 1.3给我感觉最大的变化是网络部分， 1.5启用了cni网络插件
+不需要像以前一样非要把flannel和docker绑在一起了（先启flannel才能启docker）。具体可以看[这里](https://github.com/containernetworking/cni/blob/master/Documentation/flannel.md)

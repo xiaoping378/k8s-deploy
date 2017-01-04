@@ -13,3 +13,5 @@
   ```
   bash -c ./deploy-etcd.sh
   ```
+
+note. 如果以前节点上部署过etcd， 自行清理遗留数据: ```systemctl stop etcd 和 rm -rf /var/lib/etcd/*```

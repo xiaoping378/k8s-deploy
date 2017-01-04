@@ -150,8 +150,7 @@ kube::install_keepalived()
     i=$?
     set -e
     if [ $i -ne 0 ]; then
-        # centos7 needless to do this
-        # ip addr add ${KUBE_VIP}/32 dev ${VIP_INTERFACE}
+        ip addr add ${KUBE_VIP}/32 dev ${VIP_INTERFACE}
         curl -L http://$HTTP_SERVER/rpms/keepalived.tar.gz > /tmp/keepalived.tar.gz
         tar zxf /tmp/keepalived.tar.gz -C /tmp
         yum localinstall -y  /tmp/keepalived/*.rpm

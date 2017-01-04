@@ -100,11 +100,20 @@ etcd::deploy()
         etcd::ssh_nowait "root@${NODE_MAP[$key]}" "systemctl daemon-reload && systemctl enable etcd && nohup systemctl start etcd"
     done
 
-    rm -f ${PWD}/${key}.conf etcd.service
-
 }
+
+etcd::clean()
+{
+  for key in ${!NODE_MAP[@]}
+  do
+    rm -f ${PWD}/${key}.conf
+  done
+  rm -f ${PWD}/etcd.service
+}
+
 
 etcd::download
 etcd::gen_unit
 etcd::deploy
-echo -e "\033[32m 部署完毕！ \033[0m"
+etcd::clean
+echo -e "\033[32m 部署完毕！ 执行etcdctl cluster-health，检测是否OK \033[0m"
