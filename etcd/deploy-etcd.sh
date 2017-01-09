@@ -97,6 +97,7 @@ etcd::deploy()
         etcd::scp "root@${NODE_MAP[$key]}" "${key}.conf" "/etc/etcd/10-etcd.conf"
         etcd::scp "root@${NODE_MAP[$key]}" "etcd.service" "/usr/lib/systemd/system"
         etcd::scp "root@${NODE_MAP[$key]}" "${PWD}/temp-etcd/etcd ${PWD}/temp-etcd/etcdctl" "/usr/bin"
+        etcd::ssh "root@${NODE_MAP[$key]}" "chmod 755 /usr/bin/etcd*"
         etcd::ssh_nowait "root@${NODE_MAP[$key]}" "systemctl daemon-reload && systemctl enable etcd && nohup systemctl start etcd"
     done
 
