@@ -300,6 +300,8 @@ kube::tear_down()
     fi
     rm -rf /var/lib/cni
     ip link del cni0
+    ip link del docker0
+    ip link del flannel.1
 }
 
 main()
