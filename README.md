@@ -4,7 +4,7 @@
 
 基于Centos7-1503-minimal运行脚本测试OK， 默认安装docker1.12.3 etcd-v3.0.15 k8s-v1.5.1
 
-本离线安装所有的依赖都打包放到了[百度网盘](https://pan.baidu.com/s/1i5jusip)
+本离线安装所有的依赖都打包放到了[百度网盘](https://pan.baidu.com/s/1i5jusip)，不放心安全的，可自行打包替换，就是些镜像tar包和rpms
 
 简要说明
 
@@ -26,7 +26,7 @@
 Serving HTTP on 0.0.0.0 port 8000 ...
 ```
 
-windows上可以用hfs临时启个http server， 自行百度如何使用
+windows上可以用hfs临时启个http server， 自行google如何使用
 
 ## master侧
 
@@ -83,9 +83,9 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token=6c96b6.ca
 
 ## 总结
 
-* 这个脚本如果中间运行出错，就会自动退出，自己手动执行下退出前卡住的地方，找原因，解决后，继续执行一开始的命令curl -L .... |　bash -s ...
+* 脚本如果中间运行出错，就会自动退出，自己手动执行下退出前的地方，找原因，解决后，继续执行一开始的命令curl -L ... |　bash -s ...
 
-* 1.5.1，默认关闭了匿名访问，要通过带token的方式访问API，参考[这里](http://kubernetes.io/docs/user-guide/accessing-the-cluster/),
+* 1.5.1，默认关闭了匿名访问，可通过带token的方式访问API，参考[这里](http://kubernetes.io/docs/user-guide/accessing-the-cluster/),
   ```
   TOKEN=$(kubectl describe secret $(kubectl get secrets | grep default | cut -f1 -d ' ') | grep -E '^token' | cut -f2 -d':' | tr -d '\t')
   curl -k --tlsv1 -H "Authorization: Bearer $TOKEN" https://192.168.56.103:6443/api
