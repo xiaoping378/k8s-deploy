@@ -78,7 +78,7 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh | bash -s replica \
 视自己的情况而定， 使用第一个master侧生成的token， 注意这里的56.103是你的VIP地址
 
 ```
-curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token=6c96b6.ca1d13745c237904 192.168.56.103
+curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token=9b134b.8548542cddeaaa41 192.168.56.103
 ```
 
 ## 总结
@@ -95,15 +95,15 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token=6c96b6.ca
 * 1.5 与 1.3给我感觉最大的变化是网络部分， 1.5启用了cni网络插件
   不需要像以前一样非要把flannel和docker绑在一起了（先启flannel才能启docker）。具体可以看[这里](https://github.com/containernetworking/cni/blob/master/Documentation/flannel.md)
 
-* 有人反馈 ``kubectl get no ``，node节点没显示master信息，实际上这个只是少个label， 可以这样操作
-
+* node join时，可能会遇到 disvoery refused的问题
   ```
-  # kubectl label node node1 kubeadm.alpha.kubernetes.io/role=master
-  # kubectl label node node2 kubeadm.alpha.kubernetes.io/role=master
+  这个问题是因为kube-discovery飘到非vip的节点上了，万全的做法是
+  # kubectl scale deployment --replicas 3 kube-discovery -n kube-system  
+  ```
 
-  # kubectl get node
-  NAME      STATUS         AGE
-  node0     Ready,master   15m
-  node1     Ready,master   6m
-  node2     Ready,master   4m
+* 还有人反馈，有些node上kube-flannel会出现CrashLoopBackOff问题，
+  ```
+  我这里重现过一次，问题是dial tcp 10.96.0.1:443: i/o timeout， 也就是flannel联系不上api-server了。
+  查看iptables正常，sep都存在, 清掉iptabels，重启kube-proxy可解决
+
   ```

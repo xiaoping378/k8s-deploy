@@ -105,19 +105,6 @@ kube::config_firewalld()
     # iptables -A IN_public_allow -p tcp -m tcp --dport 10250 -m conntrack --ctstate NEW -j ACCEPT
 }
 
-kube::wati_manifests(){
-    until [ -f /etc/kubernetes/manifests/kube-scheduler.json ]; do sleep 1; done
-}
-
-kube::config_manifests()
-{
-    cd /etc/kubernetes/manifests
-    for file in `ls`
-    do
-        sed -i '/image/a\        \"imagePullPolicy\": \"IfNotPresent\",' $file
-    done
-}
-
 kube::wait_apiserver()
 {
     until curl http://127.0.0.1:8080; do sleep 1; done
@@ -223,6 +210,12 @@ kube::copy_master_config()
     systemctl start kubelet
 }
 
+kube::set_label()
+{
+  until kubectl get no | grep `hostname`; do sleep 1; done
+  kubectl label node `hostname` kubeadm.alpha.kubernetes.io/role=master
+}
+
 kube::master_up()
 {
     shift
@@ -240,10 +233,6 @@ kube::master_up()
 
     # 这里一定要带上--pod-network-cidr参数，不然后面的flannel网络会出问题
     kubeadm init --use-kubernetes-version=v1.5.1  --pod-network-cidr=10.244.0.0/16 $@
-
-    # 改image pull 策略， 1.50之后不需要更改策略了， 默认就是 IfNotPresent
-    # kube::wati_manifests && kube::config_manifests
-    # kube::wait_apiserver
 
     # 使能master，可以被调度到
     # kubectl taint nodes --all dedicated-
@@ -270,6 +259,8 @@ kube::replica_up()
     kube::install_keepalived "BACKUP" $@
 
     kube::copy_master_config
+
+    kube::set_label
 
 }
 
