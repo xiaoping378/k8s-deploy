@@ -94,3 +94,16 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token=6c96b6.ca
 
 * 1.5 与 1.3给我感觉最大的变化是网络部分， 1.5启用了cni网络插件
   不需要像以前一样非要把flannel和docker绑在一起了（先启flannel才能启docker）。具体可以看[这里](https://github.com/containernetworking/cni/blob/master/Documentation/flannel.md)
+
+* 有人反馈 ``kubectl get no ``，node节点没显示master信息，实际上这个只是少个label， 可以这样操作
+
+  ```
+  # kubectl label node node1 kubeadm.alpha.kubernetes.io/role=master
+  # kubectl label node node2 kubeadm.alpha.kubernetes.io/role=master
+
+  # kubectl get node
+  NAME      STATUS         AGE
+  node0     Ready,master   15m
+  node1     Ready,master   6m
+  node2     Ready,master   4m
+  ```

@@ -68,7 +68,7 @@ kube::load_images()
         kube-dnsmasq-amd64_1.4
         dnsmasq-metrics-amd64_1.0
         etcd_v3.0.15
-        flannel-git_latest
+        flannel-amd64_v0.7.0
     )
 
     for i in "${!images[@]}"; do
@@ -251,7 +251,7 @@ kube::master_up()
     echo -e "\033[32m 赶紧找地方记录上面的token！ \033[0m"
 
     # install flannel network
-    kubectl apply -f http://$HTTP_SERVER/network/kube-flannel.yaml
+    kubectl apply -f http://$HTTP_SERVER/network/kube-flannel.yaml --namespace=kube-system
 
     # show pods
     kubectl get po --all-namespaces
