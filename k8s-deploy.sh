@@ -202,7 +202,6 @@ kube::get_etcd_master()
     etcd_master=${temp%%:*}
 }
 
-
 kube::save_master_ip()
 {
     set +e
@@ -215,7 +214,7 @@ kube::save_master_ip()
 
 kube::copy_master_config()
 {
-    local master_ip=cat | ssh root@$etcd_master "etcdctl get ha_master"
+    local master_ip=$(ssh root@$etcd_master "etcdctl get /ha_master")
     mkdir -p /etc/kubernetes
     scp -r root@${master_ip}:/etc/kubernetes/* /etc/kubernetes/
     systemctl start kubelet
@@ -315,8 +314,8 @@ kube::tear_down()
 
 kube::shl_test()
 {
-    kube::get_etcd_master() $@
-    kube::save_master_ip()
+    kube::get_etcd_master $@
+    kube::copy_master_config
 }
 
 main()
@@ -336,7 +335,7 @@ main()
         kube::tear_down $@
         ;;
     "t" | "test" )
-        kube::shl_test 
+        kube::shl_test  $@
         ;;
     *)
         echo "usage: $0 m[master] | r[replica] | j[join] token | d[down] "
