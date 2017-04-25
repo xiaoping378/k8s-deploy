@@ -2,7 +2,7 @@
 set -x
 set -e
 
-HTTP_SERVER=10.2.11.177:8000
+HTTP_SERVER=192.168.56.1:8000
 KUBE_HA=true
 
 KUBE_REPO_PREFIX=gcr.io/google_containers
@@ -195,26 +195,27 @@ EOF
 }
 
 
-kube::get_etcd_master()
+kube::get_etcd_endpoint()
 {
     local var=$2
     local temp=${var#*//}
-    etcd_master=${temp%%:*}
+    etcd_endpoint=${temp%%:*}
 }
 
 kube::save_master_ip()
 {
     set +e
-    # 应该从 $2 里拿到 etcd群的 --endpoints, 这里默认走的127.0.0.1:2379
+    kube::get_etcd_endpoint $@
     if [ ${KUBE_HA} == true ];then
-        ssh root@$etcd_master "etcdctl mk ha_master ${LOCAL_IP}"
+        ssh root@$etcd_endpoint "etcdctl mk ha_master ${LOCAL_IP}"
     fi
     set -e
 }
 
 kube::copy_master_config()
 {
-    local master_ip=$(ssh root@$etcd_master "etcdctl get /ha_master")
+    kube::get_etcd_endpoint $@
+    local master_ip=$(ssh root@$etcd_endpoint "etcdctl get /ha_master")
     mkdir -p /etc/kubernetes
     scp -r root@${master_ip}:/etc/kubernetes/* /etc/kubernetes/
     systemctl start kubelet
@@ -243,8 +244,7 @@ kube::master_up()
     [ ${KUBE_HA} == true ] && kube::install_keepalived "MASTER" $@
 
     # 存储master ip， replica侧需要用这个信息来copy 配置
-    kube::get_etcd_master $@
-    kube::save_master_ip
+    kube::save_master_ip $@
 
     # 这里一定要带上--pod-network-cidr参数，不然后面的flannel网络会出问题
     kubeadm init --use-kubernetes-version=v1.5.1  --pod-network-cidr=10.244.0.0/16 $@
@@ -271,11 +271,9 @@ kube::replica_up()
 
     kube::install_bin
 
-    kube::get_etcd_master $@
-
     kube::install_keepalived "BACKUP" $@
 
-    kube::copy_master_config
+    kube::copy_master_config $@
 
     kube::set_label
 
@@ -315,8 +313,8 @@ kube::tear_down()
 
 kube::shl_test()
 {
-    kube::get_etcd_master $@
-    kube::copy_master_config
+    kube::get_etcd_endpoint $@
+    kube::copy_endpoint_config
 }
 
 main()
