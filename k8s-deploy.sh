@@ -331,7 +331,7 @@ main()
         kube::node_up $@
         ;;
     "d" | "down" )
-        kube::tear_down $@
+        kube::tear_down
         ;;
     "t" | "test" )
         kube::shl_test  $@
