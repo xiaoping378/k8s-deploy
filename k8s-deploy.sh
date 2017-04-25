@@ -207,7 +207,7 @@ kube::save_master_ip()
     set +e
     # 应该从 $2 里拿到 etcd群的 --endpoints, 这里默认走的127.0.0.1:2379
     if [ ${KUBE_HA} == true ];then
-        ssh root@$etcd_master "etcdctl mk ha_master ${etcd_master}"
+        ssh root@$etcd_master "etcdctl mk ha_master ${LOCAL_IP}"
     fi
     set -e
 }
@@ -243,6 +243,7 @@ kube::master_up()
     [ ${KUBE_HA} == true ] && kube::install_keepalived "MASTER" $@
 
     # 存储master ip， replica侧需要用这个信息来copy 配置
+    kube::get_etcd_master $@
     kube::save_master_ip
 
     # 这里一定要带上--pod-network-cidr参数，不然后面的flannel网络会出问题
