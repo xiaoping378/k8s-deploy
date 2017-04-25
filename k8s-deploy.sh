@@ -2,7 +2,7 @@
 set -x
 set -e
 
-HTTP_SERVER=192.168.56.1:8000
+HTTP_SERVER=10.2.11.177:8000
 KUBE_HA=true
 
 KUBE_REPO_PREFIX=gcr.io/google_containers
@@ -194,17 +194,28 @@ EOF
   systemctl daemon-reload && systemctl restart keepalived.service
 }
 
+
+kube::get_etcd_master()
+{
+    local var=$2
+    local temp=${var#*//}
+    etcd_master=${temp%%:*}
+}
+
+
 kube::save_master_ip()
 {
     set +e
     # 应该从 $2 里拿到 etcd群的 --endpoints, 这里默认走的127.0.0.1:2379
-    [ ${KUBE_HA} == true ] && etcdctl mk ha_master ${LOCAL_IP}
+    if [ ${KUBE_HA} == true ];then
+        ssh root@$etcd_master "etcdctl mk ha_master ${etcd_master}"
+    fi
     set -e
 }
 
 kube::copy_master_config()
 {
-    local master_ip=$(etcdctl get ha_master)
+    local master_ip=cat | ssh root@$etcd_master "etcdctl get ha_master"
     mkdir -p /etc/kubernetes
     scp -r root@${master_ip}:/etc/kubernetes/* /etc/kubernetes/
     systemctl start kubelet
@@ -212,8 +223,12 @@ kube::copy_master_config()
 
 kube::set_label()
 {
-  until kubectl get no | grep `hostname`; do sleep 1; done
-  kubectl label node `hostname` kubeadm.alpha.kubernetes.io/role=master
+  #until kubectl get no | grep -i `hostname`; do sleep 1; done
+  #kubectl label node `hostname` kubeadm.alpha.kubernetes.io/role=master
+    local hstnm=`hostname`
+    local lowhstnm=$(echo $hstnm | tr '[A-Z]' '[a-z]') 
+    until kubectl get no | grep -i $lowhstnm; do sleep 1; done
+    kubectl label node $lowhstnm kubeadm.alpha.kubernetes.io/role=master
 }
 
 kube::master_up()
@@ -256,6 +271,8 @@ kube::replica_up()
 
     kube::install_bin
 
+    kube::get_etcd_master $@
+
     kube::install_keepalived "BACKUP" $@
 
     kube::copy_master_config
@@ -296,6 +313,12 @@ kube::tear_down()
     ip link del cni0
 }
 
+kube::shl_test()
+{
+    kube::get_etcd_master() $@
+    kube::save_master_ip()
+}
+
 main()
 {
     case $1 in
@@ -310,7 +333,10 @@ main()
         kube::node_up $@
         ;;
     "d" | "down" )
-        kube::tear_down
+        kube::tear_down $@
+        ;;
+    "t" | "test" )
+        kube::shl_test 
         ;;
     *)
         echo "usage: $0 m[master] | r[replica] | j[join] token | d[down] "
