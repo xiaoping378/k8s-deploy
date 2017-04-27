@@ -194,17 +194,28 @@ EOF
   systemctl daemon-reload && systemctl restart keepalived.service
 }
 
+
+kube::get_etcd_endpoint()
+{
+    local var=$2
+    local temp=${var#*//}
+    etcd_endpoint=${temp%%:*}
+}
+
 kube::save_master_ip()
 {
     set +e
-    # 应该从 $2 里拿到 etcd群的 --endpoints, 这里默认走的127.0.0.1:2379
-    [ ${KUBE_HA} == true ] && etcdctl mk ha_master ${LOCAL_IP}
+    if [ ${KUBE_HA} == true ];then
+        kube::get_etcd_endpoint $@
+        ssh root@$etcd_endpoint "etcdctl mk ha_master ${LOCAL_IP}"
+    fi
     set -e
 }
 
 kube::copy_master_config()
 {
-    local master_ip=$(etcdctl get ha_master)
+    kube::get_etcd_endpoint $@
+    local master_ip=$(ssh root@$etcd_endpoint "etcdctl get /ha_master")
     mkdir -p /etc/kubernetes
     scp -r root@${master_ip}:/etc/kubernetes/* /etc/kubernetes/
     systemctl start kubelet
@@ -212,8 +223,12 @@ kube::copy_master_config()
 
 kube::set_label()
 {
-  until kubectl get no | grep `hostname`; do sleep 1; done
-  kubectl label node `hostname` kubeadm.alpha.kubernetes.io/role=master
+  #until kubectl get no | grep -i `hostname`; do sleep 1; done
+  #kubectl label node `hostname` kubeadm.alpha.kubernetes.io/role=master
+    local hstnm=`hostname`
+    local lowhstnm=$(echo $hstnm | tr '[A-Z]' '[a-z]') 
+    until kubectl get no | grep -i $lowhstnm; do sleep 1; done
+    kubectl label node $lowhstnm kubeadm.alpha.kubernetes.io/role=master
 }
 
 kube::master_up()
@@ -229,7 +244,7 @@ kube::master_up()
     [ ${KUBE_HA} == true ] && kube::install_keepalived "MASTER" $@
 
     # 存储master ip， replica侧需要用这个信息来copy 配置
-    kube::save_master_ip
+    kube::save_master_ip $@
 
     # 这里一定要带上--pod-network-cidr参数，不然后面的flannel网络会出问题
     kubeadm init --use-kubernetes-version=v1.5.1  --pod-network-cidr=10.244.0.0/16 $@
@@ -258,7 +273,7 @@ kube::replica_up()
 
     kube::install_keepalived "BACKUP" $@
 
-    kube::copy_master_config
+    kube::copy_master_config $@
 
     kube::set_label
 
@@ -296,6 +311,12 @@ kube::tear_down()
     ip link del cni0
 }
 
+kube::shl_test()
+{
+    kube::get_etcd_endpoint $@
+    kube::copy_endpoint_config
+}
+
 main()
 {
     case $1 in
@@ -311,6 +332,9 @@ main()
         ;;
     "d" | "down" )
         kube::tear_down
+        ;;
+    "t" | "test" )
+        kube::shl_test  $@
         ;;
     *)
         echo "usage: $0 m[master] | r[replica] | j[join] token | d[down] "
