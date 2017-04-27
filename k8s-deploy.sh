@@ -205,8 +205,8 @@ kube::get_etcd_endpoint()
 kube::save_master_ip()
 {
     set +e
-    kube::get_etcd_endpoint $@
     if [ ${KUBE_HA} == true ];then
+        kube::get_etcd_endpoint $@
         ssh root@$etcd_endpoint "etcdctl mk ha_master ${LOCAL_IP}"
     fi
     set -e
