@@ -10,7 +10,7 @@
 
 * 基于kubeadm搭建的kubernetes1.5 HA高可用集群
 * HA环境，需要先存在etcd集群，可使用etcd目录下的一键部署etcd集群脚本
-* 默认master和etcd部署在同一台设备，共三台相互冗余
+* 共三台相互冗余，支持master和etcd分开部署
 * master间通过keepalived做主-从-从冗余， controller和scheduler通过自带的--leader-elect选项
 * 如果只想部署单master的话， 可以修改脚本里KUBE_HA=false
 * 如果想部署kubeadm的默认模式，即全面容器化但都单实例的方式，可以参考[这里](https://github.com/xiaoping378/blog/issues/5)
