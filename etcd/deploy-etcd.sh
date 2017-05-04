@@ -9,7 +9,7 @@ declare -A NODE_MAP=( ["etcd0"]="192.168.56.100" ["etcd1"]="192.168.56.101" ["et
 
 etcd::download()
 {
-    ETCD_VER=v3.0.15
+    ETCD_VER=v3.0.17
     DOWNLOAD_URL=https://github.com/coreos/etcd/releases/download
     [ -f ${PWD}/temp-etcd/etcd ]  && return
     curl -L ${DOWNLOAD_URL}/${ETCD_VER}/etcd-${ETCD_VER}-linux-amd64.tar.gz -o ${PWD}/etcd-${ETCD_VER}-linux-amd64.tar.gz

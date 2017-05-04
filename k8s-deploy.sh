@@ -6,7 +6,7 @@ HTTP_SERVER=192.168.56.1:8000
 KUBE_HA=true
 
 KUBE_REPO_PREFIX=gcr.io/google_containers
-KUBE_ETCD_IMAGE=quay.io/coreos/etcd:v3.0.15
+KUBE_ETCD_IMAGE=quay.io/coreos/etcd:v3.0.17
 
 root=$(id -u)
 if [ "$root" -ne 0 ] ;then
@@ -42,12 +42,7 @@ cat <<EOF >>/etc/sysctl.conf
     net.bridge.bridge-nf-call-iptables = 1
 EOF
 
-    mkdir -p /etc/systemd/system/docker.service.d
-cat <<EOF >/etc/systemd/system/docker.service.d/10-docker.conf
-[Service]
-    ExecStart=
-    ExecStart=/usr/bin/dockerd -s overlay --selinux-enabled=false
-EOF
+    sed -i -e 's/DOCKER_STORAGE_OPTIONS=/DOCKER_STORAGE_OPTIONS="-s overlay --selinux-enabled=false"/g' /etc/sysconfig/docker-storage
 
     systemctl daemon-reload && systemctl restart docker.service
 }
@@ -57,18 +52,16 @@ kube::load_images()
     mkdir -p /tmp/k8s
 
     images=(
-        kube-apiserver-amd64_v1.5.1
-        kube-controller-manager-amd64_v1.5.1
-        kube-scheduler-amd64_v1.5.1
-        kube-proxy-amd64_v1.5.1
+        kube-apiserver-amd64_v1.6.2
+        kube-controller-manager-amd64_v1.6.2
+        kube-scheduler-amd64_v1.6.2
+        kube-proxy-amd64_v1.6.2
         pause-amd64_3.0
-        kube-discovery-amd64_1.0
-        kubedns-amd64_1.9
-        exechealthz-amd64_1.2
-        kube-dnsmasq-amd64_1.4
-        dnsmasq-metrics-amd64_1.0
-        etcd_v3.0.15
-        flannel-amd64_v0.7.0
+        k8s-dns-dnsmasq-nanny-amd64_1.14.1
+        k8s-dns-kube-dns-amd64_1.14.1
+        k8s-dns-sidecar-amd64_1.14.1
+        etcd_v3.0.17
+        flannel-amd64_v0.7.1
     )
 
     for i in "${!images[@]}"; do
@@ -82,7 +75,7 @@ kube::load_images()
     rm /tmp/k8s* -rf
 }
 
-kube::install_bin()
+kube::install_k8s()
 {
     set +e
     which kubeadm > /dev/null 2>&1
@@ -105,25 +98,13 @@ kube::config_firewalld()
     # iptables -A IN_public_allow -p tcp -m tcp --dport 10250 -m conntrack --ctstate NEW -j ACCEPT
 }
 
-kube::wait_apiserver()
-{
-    until curl http://127.0.0.1:8080; do sleep 1; done
-}
-
-kube::disable_static_pod()
-{
-    # remove the waring log in kubelet
-    sed -i 's/--pod-manifest-path=\/etc\/kubernetes\/manifests//g' /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
-    systemctl daemon-reload && systemctl restart kubelet.service
-}
-
 kube::get_env()
 {
   HA_STATE=$1
   [ $HA_STATE == "MASTER" ] && HA_PRIORITY=200 || HA_PRIORITY=`expr 200 - ${RANDOM} / 1000 + 1`
   KUBE_VIP=$(echo $2 |awk -F= '{print $2}')
   VIP_PREFIX=$(echo ${KUBE_VIP} | cut -d . -f 1,2,3)
-  #dhcp和static地址的不同取法
+  ###dhcp和static地址的不同取法
   VIP_INTERFACE=$(ip addr show | grep ${VIP_PREFIX} | awk -F 'dynamic' '{print $2}' | head -1)
   [ -z ${VIP_INTERFACE} ] && VIP_INTERFACE=$(ip addr show | grep ${VIP_PREFIX} | awk -F 'global' '{print $2}' | head -1)
   ###
@@ -159,7 +140,7 @@ global_defs {
 }
 
 vrrp_script CheckK8sMaster {
-    script "curl http://127.0.0.1:8080"
+    script "curl -k https://127.0.0.1:6443/api"
     interval 3
     timeout 9
     fall 2
@@ -204,12 +185,10 @@ kube::get_etcd_endpoint()
 
 kube::save_master_ip()
 {
-    set +e
     if [ ${KUBE_HA} == true ];then
         kube::get_etcd_endpoint $@
-        ssh root@$etcd_endpoint "etcdctl mk ha_master ${LOCAL_IP}"
+        set +e; ssh root@$etcd_endpoint "etcdctl mk ha_master ${LOCAL_IP}"; set -e
     fi
-    set -e
 }
 
 kube::copy_master_config()
@@ -218,17 +197,61 @@ kube::copy_master_config()
     local master_ip=$(ssh root@$etcd_endpoint "etcdctl get /ha_master")
     mkdir -p /etc/kubernetes
     scp -r root@${master_ip}:/etc/kubernetes/* /etc/kubernetes/
-    systemctl start kubelet
+    systemctl daemon-reload && systemctl start kubelet
 }
 
 kube::set_label()
 {
-  #until kubectl get no | grep -i `hostname`; do sleep 1; done
-  #kubectl label node `hostname` kubeadm.alpha.kubernetes.io/role=master
+    export KUBECONFIG=/etc/kubernetes/admin.conf
     local hstnm=`hostname`
-    local lowhstnm=$(echo $hstnm | tr '[A-Z]' '[a-z]') 
+    local lowhstnm=$(echo $hstnm | tr '[A-Z]' '[a-z]')
     until kubectl get no | grep -i $lowhstnm; do sleep 1; done
     kubectl label node $lowhstnm kubeadm.alpha.kubernetes.io/role=master
+}
+
+kube::config_kubeadm()
+{
+
+  # kubeadm需要联网去找最新版本
+  echo $HTTP_SERVER storage.googleapis.com >> /etc/hosts
+
+  local endpoints=$2
+  local temp=${endpoints#*=}
+  local etcd0=$(echo $temp | awk -F ',' '{print $1}')
+  local etcd1=$(echo $temp | awk -F ',' '{print $2}')
+  local etcd2=$(echo $temp | awk -F ',' '{print $3}')
+  local advertiseAddress=$1
+  local advertiseAddress=${advertiseAddress#*=}
+
+cat <<EOF >$HOME/kubeadm-config.yml
+apiVersion: kubeadm.k8s.io/v1alpha1
+kind: MasterConfiguration
+api:
+  advertiseAddress: "$advertiseAddress"
+#   bindPort: <int>
+etcd:
+  endpoints:
+  - "$etcd0"
+  - "$etcd1"
+  - "$etcd2"
+  # caFile: <path|string>
+  # certFile: <path|string>
+  # keyFile: <path|string>
+kubernetesVersion: "v1.6.2"
+networking:
+  # dnsDomain: <string>
+  # serviceSubnet: <cidr>
+  # 这里一定要带上--pod-network-cidr参数，不然后面的flannel网络会出问题
+  podSubnet: 12.240.0.0/12
+EOF
+}
+
+kube::install_cni()
+{
+  # install flannel network
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+  kubectl apply -f http://$HTTP_SERVER/network/kube-flannel-rbac.yml
+  kubectl apply -f http://$HTTP_SERVER/network/kube-flannel.yml --namespace=kube-system
 }
 
 kube::master_up()
@@ -239,23 +262,29 @@ kube::master_up()
 
     kube::load_images
 
-    kube::install_bin
+    kube::install_k8s
 
     [ ${KUBE_HA} == true ] && kube::install_keepalived "MASTER" $@
 
     # 存储master ip， replica侧需要用这个信息来copy 配置
     kube::save_master_ip $@
 
-    # 这里一定要带上--pod-network-cidr参数，不然后面的flannel网络会出问题
-    kubeadm init --use-kubernetes-version=v1.5.1  --pod-network-cidr=10.244.0.0/16 $@
+    kube::config_kubeadm $@
+
+    kubeadm init --config=$HOME/kubeadm-config.yml
 
     # 使能master，可以被调度到
     # kubectl taint nodes --all dedicated-
 
     echo -e "\033[32m 赶紧找地方记录上面的token！ \033[0m"
 
-    # install flannel network
-    kubectl apply -f http://$HTTP_SERVER/network/kube-flannel.yaml --namespace=kube-system
+    kube::install_cni
+
+    # 为了kubectl　get no的时候可以显示master标识
+    kube::set_label
+
+    # make kube-dns HA
+    kubectl patch deployment kube-dns -p'{"spec":{"replicas":3}}' -n kube-system
 
     # show pods
     kubectl get po --all-namespaces
@@ -269,7 +298,7 @@ kube::replica_up()
 
     kube::load_images
 
-    kube::install_bin
+    kube::install_k8s
 
     kube::install_keepalived "BACKUP" $@
 
@@ -281,13 +310,13 @@ kube::replica_up()
 
 kube::node_up()
 {
+    shift
+
     kube::install_docker
 
     kube::load_images
 
-    kube::install_bin
-
-    kube::disable_static_pod
+    kube::install_k8s
 
     kube::config_firewalld
 
@@ -308,13 +337,14 @@ kube::tear_down()
       rm -rf /etc/keepalived/keepalived.conf
     fi
     rm -rf /var/lib/cni
+    rm -rf /etc/systemd/system/docker.service.d/*
     ip link del cni0
 }
 
-kube::shl_test()
+kube::test()
 {
-    kube::get_etcd_endpoint $@
-    kube::copy_endpoint_config
+    shift
+    kube::config_kubeadm $@
 }
 
 main()
@@ -327,14 +357,13 @@ main()
         kube::replica_up $@
         ;;
     "j" | "join" )
-        shift
         kube::node_up $@
         ;;
     "d" | "down" )
         kube::tear_down
         ;;
     "t" | "test" )
-        kube::shl_test  $@
+        kube::test  $@
         ;;
     *)
         echo "usage: $0 m[master] | r[replica] | j[join] token | d[down] "

@@ -1,15 +1,15 @@
-# 离线安装 kubernetes 1.5 高可用集群
+# 离线安装 kubernetes 高可用集群
 
 经常遇到全新初始安装k8s集群的问题，所以想着搞成离线模式，本着最小依赖原则，采用纯shell脚本编写
 
-基于Centos7-1503-minimal运行脚本测试OK， 默认安装docker1.12.3 etcd-v3.0.15 k8s-v1.5.1
+基于Centos7.2-1511-minimal运行脚本测试OK， 默认安装docker1.12.6 etcd-v3.0.17 k8s-v1.6.2
 
-本离线安装所有的依赖都打包放到了[百度网盘](https://pan.baidu.com/s/1i5jusip)，不放心安全的，可自行打包替换，就是些镜像tar包和rpms
+本离线安装所有的依赖都打包放到了[百度网盘](https://pan.baidu.com/s/1nvQDdsl)，不放心安全的，可自行打包替换，就是些镜像tar包和rpms
 
 简要说明
 
-* 基于kubeadm搭建的kubernetes1.5 HA高可用集群
-* HA环境，需要先存在etcd集群，可使用etcd目录下的一键部署etcd集群脚本
+* 基于kubeadm搭建的kubernetes1.6 HA高可用集群
+* 部署HA环境，需要先`存在etcd集群`，可使用etcd目录下的一键部署etcd集群脚本
 * 共三台相互冗余，支持master和etcd分开部署
 * master间通过keepalived做主-从-从冗余， controller和scheduler通过自带的--leader-elect选项
 * 如果只想部署单master的话， 可以修改脚本里KUBE_HA=false
@@ -34,15 +34,15 @@ windows上可以用hfs临时启个http server， 自行google如何使用
 
 ```
 curl -L http://192.168.56.1:8000/k8s-deploy.sh | bash -s master \
-    --api-advertise-addresses=192.168.56.103 \
-    --external-etcd-endpoints=http://192.168.56.100:2379,http://192.168.56.101:2379,http://192.168.56.102:2379
+    --VIP=192.168.56.103 \
+    --etcd-endpoints=http://192.168.56.100:2379,http://192.168.56.101:2379,http://192.168.56.102:2379
 ```
 
 * **192.168.56.1:8000** 是我的http-server, 注意要将k8s-deploy.sh 里的HTTP-SERVER变量也改下
 
-* **--api-advertise-addresses** 是VIP地址
+* **--VIP** 是keepalived侧的浮动IP地址
 
-* **--external-etcd-endpoints** 是你的etcd集群地址，这样kubeadm将不再生成etcd.yaml manifest文件
+* **--etcd-endpoints** 是你的etcd集群地址，这样kubeadm将不再生成etcd.yaml manifest文件
 
 * 记录下你的token输出， minion侧需要用到
 
@@ -57,15 +57,18 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh | bash -s master \
 最好和第一个master建立免秘钥认证，此过程需要从master那里拷贝配置
 ```
 curl -L http://192.168.56.1:8000/k8s-deploy.sh | bash -s replica \
-    --api-advertise-addresses=192.168.56.103 \
-    --external-etcd-endpoints=http://192.168.56.100:2379,http://192.168.56.101:2379,http://192.168.56.102:2379
+    --VIP=192.168.56.103 \
+    --etcd-endpoints=http://192.168.56.100:2379,http://192.168.56.101:2379,http://192.168.56.102:2379
 ```
 
 重复上面的步骤之后，会有一个3实例的HA集群，执行下面命令的时候可关闭第一个master，以验证高可用
 
 * 验证vip漂移的网络影响
 
-    ping 192.168.56.103
+      sytemctl status keepalived
+      # 确认vip落地情况
+      # 模拟apiserver故障或者断电
+      systemctl stop docker
 
 * 验证kube-apiserver故障影响
 
@@ -78,7 +81,7 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh | bash -s replica \
 视自己的情况而定， 使用第一个master侧生成的token， 注意这里的56.103是你的VIP地址
 
 ```
-curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token=9b134b.8548542cddeaaa41 192.168.56.103
+curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token 32d98a.4076a0f48b5abd3f 192.168.56.103:6443
 ```
 
 ## 总结
@@ -92,14 +95,10 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token=9b134b.85
   ```
   当然也可以通过更改apiserver的启动参数来开启匿名访问，自行google
 
+* v1.6.2, kubeadm安装默认启用了RBAC权限认证体系，详细参考[这里](https://kubernetes.io/docs/admin/authorization/rbac/)
+
 * 1.5 与 1.3给我感觉最大的变化是网络部分， 1.5启用了cni网络插件
   不需要像以前一样非要把flannel和docker绑在一起了（先启flannel才能启docker）。具体可以看[这里](https://github.com/containernetworking/cni/blob/master/Documentation/flannel.md)
-
-* node join时，可能会遇到 disvoery refused的问题
-  ```
-  这个问题是因为kube-discovery飘到非vip的节点上了，万全的做法是
-  # kubectl scale deployment --replicas 3 kube-discovery -n kube-system  
-  ```
 
 * 还有人反馈，有些node上kube-flannel会出现CrashLoopBackOff问题，
   ```
