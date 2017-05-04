@@ -86,7 +86,9 @@ kube::install_k8s()
         tar zxf /tmp/k8s.tar.gz -C /tmp
         yum localinstall -y  /tmp/k8s/*.rpm
         rm -rf /tmp/k8s*
-        systemctl enable kubelet.service && systemctl start kubelet.service && rm -rf /etc/kubernetes
+        # 增加上限，每个node最多可以跑1024个pod
+        sed -i 's/--allow-privileged=true/--allow-privileged=true --max-pods=1024/g' /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+        systemctl enable kubelet.service && systemctl daemon-reload && systemctl start kubelet.service && rm -rf /etc/kubernetes
     fi
 }
 
@@ -282,9 +284,6 @@ kube::master_up()
 
     # 为了kubectl　get no的时候可以显示master标识
     kube::set_label
-
-    # make kube-dns HA
-    kubectl patch deployment kube-dns -p'{"spec":{"replicas":3}}' -n kube-system
 
     # show pods
     kubectl get po --all-namespaces

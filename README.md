@@ -106,3 +106,8 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token 32d98a.40
   查看iptables正常，sep都存在, 清掉iptabels，重启kube-proxy可解决
 
   ```
+
+* 为了kube-dns也处于高可用状态，可以部署3实例
+  ```
+  kubectl --namespace=kube-system scale deployment kube-dns --replicas=3
+  ```
