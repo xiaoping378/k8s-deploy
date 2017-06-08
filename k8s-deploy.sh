@@ -275,9 +275,6 @@ kube::master_up()
 
     kubeadm init --config=$HOME/kubeadm-config.yml
 
-    # 使能master，可以被调度到
-    # kubectl taint nodes --all dedicated-
-
     echo -e "\033[32m 赶紧找地方记录上面的token！ \033[0m"
 
     kube::install_cni

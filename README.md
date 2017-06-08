@@ -12,7 +12,6 @@
 * 部署HA环境，需要先`存在etcd集群`，可使用etcd目录下的一键部署etcd集群脚本
 * 共三台相互冗余，支持master和etcd分开部署
 * master间通过keepalived做主-从-从冗余， controller和scheduler通过自带的--leader-elect选项
-* 如果只想部署单master的话， 可以修改脚本里KUBE_HA=false
 * 如果想部署kubeadm的默认模式，即全面容器化但都单实例的方式，可以参考[这里](https://github.com/xiaoping378/blog/issues/5)
 * [TODO]现在的keepalived和etcd集群没用容器运行，后面有时间会尝试做到全面容器化
 * 下图是官方ha模型，除了LB部分是用的keepalived的VIP功能, 此项目和官方基本一致
@@ -42,7 +41,7 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh | bash -s master \
 
 * **--VIP** 是keepalived侧的浮动IP地址
 
-* **--etcd-endpoints** 是你的etcd集群地址，这样kubeadm将不再生成etcd.yaml manifest文件
+* **--etcd-endpoints** 是你的etcd集群地址，如果第一次安装的话，可以使用etcd目录下的脚本一键安装
 
 * 记录下你的token输出， minion侧需要用到
 
@@ -98,7 +97,7 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token 32d98a.40
 * v1.6.2, kubeadm安装默认启用了RBAC权限认证体系，详细参考[这里](https://kubernetes.io/docs/admin/authorization/rbac/)
 
 * 1.5 与 1.3给我感觉最大的变化是网络部分， 1.5启用了cni网络插件
-  不需要像以前一样非要把flannel和docker绑在一起了（先启flannel才能启docker）。具体可以看[这里](https://github.com/containernetworking/cni/blob/master/Documentation/flannel.md)
+  不需要像以前一样非要把flannel和docker绑在一起了（先启flannel才能启docker）。具体可以看[这里](https://kubernetes.io/docs/concepts/cluster-administration/network-plugins/#cni)
 
 * 还有人反馈，有些node上kube-flannel会出现CrashLoopBackOff问题，
   ```
@@ -110,4 +109,9 @@ curl -L http://192.168.56.1:8000/k8s-deploy.sh |  bash -s join --token 32d98a.40
 * 为了kube-dns也处于高可用状态，可以部署3实例
   ```
   kubectl --namespace=kube-system scale deployment kube-dns --replicas=3
+  ```
+
+* 资源有限，想让master也参与调度pod的话，可以这样操作下
+  ```
+  kubectl taint node --all  node-role.kubernetes.io/master-
   ```
