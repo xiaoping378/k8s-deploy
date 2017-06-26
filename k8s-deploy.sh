@@ -335,6 +335,8 @@ kube::tear_down()
     rm -rf /var/lib/cni
     rm -rf /etc/systemd/system/docker.service.d/*
     ip link del cni0
+    ip link del docker0
+    ip link del flannel.1
 }
 
 kube::test()
